@@ -1,0 +1,12 @@
+numpy
+pandas
+tqdm
+scikit-learn
+torch
+pytorch-lightning
+transformers
+wandb
+plotly
+networkx
+seaborn
+easydict

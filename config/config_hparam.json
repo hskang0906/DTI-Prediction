@@ -1,0 +1,22 @@
+{
+	"prot_maxlength" : 545,
+	"layer_limit" : true,
+
+	"gpu_ids" : "4,6,7",
+	"model_mode" : "train",
+	
+	"max_epoch": 50,
+	"batch_size": 54,
+	"num_workers": 16,
+
+	"task_name" : "bindingdb",
+	"lr": 5e-6,
+	"layer_features" : [768, 32, 1],
+	"dropout" : 0.1,
+	"loss_fn" : "smooth",
+
+	"traindata_rate" : 1.0,
+	"pretrained": {"chem": false, "prot": false},
+	"num_seed" : 9095
+}
+

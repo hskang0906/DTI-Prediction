@@ -1,0 +1,60 @@
+{
+    "name": "Non_Pretrain_randfive",
+    "method": "grid",
+    "metric": {
+        "name": "valid_auroc",
+        "goal": "maximize"
+    },
+    "parameters":{
+        "prot_maxlength" : {
+            "value":545
+        },
+        "layer_limit" : {
+            "value": true
+        },
+        "gpu_ids" : {
+            "value" : "1,2,3,4"
+        },
+        "model_mode" :{
+            "value" : "train"
+        },
+
+        "d_pretrained": {
+            "value" : false
+        },
+    
+        "p_pretrained":{
+            "value" : false
+        },
+        "seed":{
+            "values": [6962, 8596, 8595, 9095, 8604]
+        },
+        
+        "max_epoch": {
+            "value": 50
+        },
+        "batch_size": {
+            "value": 32
+        },
+        "num_workers": {
+            "value": 16
+        },
+        
+
+        "task_name" :{
+            "value" : "bindingdb"
+        },
+        "lr": {
+            "value": 5e-6
+        },
+        "layer_features" : {
+            "value": [768, 32, 1]
+        },
+        "dropout" : {
+            "value": 0.1
+        },
+        "loss_fn": {
+            "value": "smooth"
+        }
+    }
+}
