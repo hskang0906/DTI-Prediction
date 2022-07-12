@@ -12,7 +12,6 @@ from train import BiomarkerModel
 
 def get_biomarker(drug_inputs, prot_inputs):
     output_preds = model(drug_inputs, prot_inputs)
-
     m = torch.nn.Sigmoid()
     predict = torch.squeeze(m(output_preds)).tolist()
 

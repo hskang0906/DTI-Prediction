@@ -1,0 +1,72 @@
+{
+    "name": "biomarker_bindingDB",
+    "method": "grid",
+    "metric": {
+        "name": "valid_auroc",
+        "goal": "maximize"
+    },
+    "parameters":{
+
+        "d_model_name" : {
+            "value": "seyonec/PubChem10M_SMILES_BPE_450k"
+        },
+        
+	    "p_model_name" : {
+            "value": "Rostlab/prot_bert_bfd"
+        },
+
+        "gpu_ids" : {
+            "value": "1,2,3,4"
+        },
+        "model_mode" :{
+            "value": "train"
+        },
+        "load_checkpoint" : {
+            "value": "./checkpoint/bindingDB/epoch=33-step=13463.ckpt"
+        },
+
+
+        "prot_maxlength" : {
+            "value":545
+        },
+        "layer_limit" : {
+            "value": true
+        },
+        
+        "max_epoch": {
+            "value": 50
+        },
+        "batch_size": {
+            "value": 32
+        },
+        "num_workers": {
+            "value": 16
+        },
+
+        "task_name" :{
+            "value" : "bindingDB"
+        },
+        "lr": {
+            "value": 5e-6
+        },
+        "layer_features" : {
+            "value": [768, 32, 1]
+        },
+        "dropout" : {
+            "value": 0.1
+        },
+        "loss_fn": {
+            "value": "smooth"
+        },
+
+        "traindata_rate" : {
+            "value": 1.0
+        },
+	    "pretrained": {
+            "value" : {"chem": true, "prot": true}
+        },
+        "seed":{
+            "values": [8595, 612, 8596, 6962, 9095]
+        }
+    }
+}

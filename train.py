@@ -1,3 +1,4 @@
+from curses import delay_output
 import gc
 from turtle import forward
 import numpy as np
@@ -14,11 +15,10 @@ import sklearn as sk
 from torch.utils.data import Dataset, DataLoader
 
 import pytorch_lightning as pl
-from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from transformers import AutoConfig, AutoTokenizer, RobertaModel, BertModel
 
-from torchmetrics.functional import f1, accuracy, auroc, precision_recall_curve
 from sklearn.metrics import f1_score, roc_curve, precision_score, recall_score, auc
 from sklearn.metrics import roc_auc_score, average_precision_score
 
@@ -146,11 +146,9 @@ class BiomarkerDataModule(pl.LightningDataModule):
                                                 self.d_tokenizer, self.p_tokenizer, self.prot_maxLength)
 
     def train_dataloader(self):
-        # return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
         return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 
     def val_dataloader(self):
-        # return DataLoader(self.valid_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
         return DataLoader(self.valid_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
 
     def test_dataloader(self):
@@ -230,7 +228,7 @@ class BiomarkerModel(pl.LightningModule):
         labels = batch[4]
 
         output = self(drug_inputs, prot_inputs)
-
+        output = nn.Sigmoid(output)
         logits = output.squeeze(dim=1)
         
         if self.loss_fn == 'BCE':
@@ -248,9 +246,9 @@ class BiomarkerModel(pl.LightningModule):
         drug_inputs = {'input_ids': batch[0], 'attention_mask': batch[1]}
         prot_inputs = {'input_ids': batch[2], 'attention_mask': batch[3]}
         labels = batch[4]
-
+        
         output = self(drug_inputs, prot_inputs)
-
+        output = nn.Sigmoid(output)
         logits = output.squeeze(dim=1)
 
         if self.loss_fn == 'BCE':
@@ -281,6 +279,7 @@ class BiomarkerModel(pl.LightningModule):
         labels = batch[4]
 
         output = self(drug_inputs, prot_inputs)
+        output = nn.Sigmoid(output)
         logits = output.squeeze(dim=1)
 
         if self.loss_fn == 'BCE':
@@ -394,76 +393,109 @@ class BiomarkerModel(pl.LightningModule):
         return auroc_score, auprc_score, sensitivity1, specificity1, thred_optim
 
 
-def wandb_train(config=None):
-    gc.collect()
-    torch.cuda.empty_cache()
-
+def main_wandb(config=None):
     try:
         if config is not None:
-            wandb.init(config=config, project=wandb_project)
+            wandb.init(config=config, project=config["project"])
         else:
             wandb.init()
         
         config = wandb.config
         pl.seed_everything(seed=config.num_seed)
 
-        d_model_name = "seyonec/PubChem10M_SMILES_BPE_450k"
-        p_model_name = "Rostlab/prot_bert_bfd"
-
-        dm = BiomarkerDataModule(config.task_name, d_model_name, p_model_name,
+        dm = BiomarkerDataModule(config.task_name, config.d_model_name, config.p_model_name,
                                  config.num_workers, config.batch_size, config.prot_maxlength, config.traindata_rate)
         dm.prepare_data()
         dm.setup()
 
-
-        if config.model_mode == "test":
-            model = BiomarkerModel.load_from_checkpoint("checkpoint/bindingDB/epoch=33-step=13463.ckpt")
-        else:
-            model = BiomarkerModel(d_model_name, p_model_name,
-                               config.lr, config.dropout, config.layer_features, config.loss_fn, config.layer_limit, config.pretrained['chem'], config.pretrained['prot'])
-
-        wandb_logger = WandbLogger(project=wandb_project)
-        checkpoint_callback = ModelCheckpoint(monitor="valid_auroc", mode="max")
-        # early_stop_callback = EarlyStopping(monitor="valid_auroc", patience=10, verbose=True, mode="max")
+        model_type = str(config.pretrained['chem'])+"To"+str(config.pretrained['prot'])
+        model_logger = WandbLogger(project=config.project)
+        checkpoint_callback = ModelCheckpoint(f"{config.task_name}_{model_type}_{config.lr}_{config.num_seed}", save_top_k=1, monitor="valid_auroc", mode="max")
     
         trainer = pl.Trainer(gpus=config.gpu_ids,
                              max_epochs=config.max_epoch,
                              precision=16,
-                             logger=wandb_logger,
+                             logger=model_logger,
                              callbacks=[checkpoint_callback],
                              accelerator='dp'
                              )
 
-        if config.model_mode != "test":
+
+        if config.model_mode == "train":
+            model = BiomarkerModel(config.d_model_name, config.p_model_name,
+                               config.lr, config.dropout, config.layer_features, config.loss_fn, config.layer_limit, config.pretrained['chem'], config.pretrained['prot'])
             model.train()
             trainer.fit(model, datamodule=dm)
 
-        ##-- Model Test --##
-        if dm.load_testData is True:
             model.eval()
             trainer.test(model, datamodule=dm)
 
+        else:
+            model = BiomarkerModel.load_from_checkpoint(config.load_checkpoint)
+            
+            model.eval()
+            trainer.test(model, datamodule=dm)
 
     except Exception as e:
         print(e)
 
-    del dm
-    del model
-    del wandb_logger
-    del trainer
 
-    gc.collect()
+def main_default(config):
+    try:
+        config = DictX(config)
+        pl.seed_everything(seed=config.num_seed)
+
+        dm = BiomarkerDataModule(config.task_name, config.d_model_name, config.p_model_name,
+                                 config.num_workers, config.batch_size, config.prot_maxlength, config.traindata_rate)
+        dm.prepare_data()
+        dm.setup()
+
+        model_type = str(config.pretrained['chem'])+"To"+str(config.pretrained['prot'])
+        model_logger = TensorBoardLogger("./log", name=f"{config.task_name}_{model_type}_{config.num_seed}")
+        checkpoint_callback = ModelCheckpoint(f"{config.task_name}_{model_type}_{config.lr}_{config.num_seed}", save_top_k=1, monitor="valid_auroc", mode="max")
+    
+        trainer = pl.Trainer(gpus=config.gpu_ids,
+                             max_epochs=config.max_epoch,
+                             precision=16,
+                             logger=model_logger,
+                             callbacks=[checkpoint_callback],
+                             accelerator='dp'
+                             )
+
+
+        if config.model_mode == "train":
+            model = BiomarkerModel(config.d_model_name, config.p_model_name,
+                               config.lr, config.dropout, config.layer_features, config.loss_fn, config.layer_limit, config.pretrained['chem'], config.pretrained['prot'])
+            model.train()
+            trainer.fit(model, datamodule=dm)
+
+            model.eval()
+            trainer.test(model, datamodule=dm)
+            
+        else:
+            model = BiomarkerModel.load_from_checkpoint(config.load_checkpoint)
+            
+            model.eval()
+            trainer.test(model, datamodule=dm)
+
+    except Exception as e:
+        print(e)
 
 
 if __name__ == '__main__':
-    wandb_project = "biomarker_bindingdb_train8595_pretopre"
-
     ##-- hyper param config file Load --##
-    config = load_hparams('config/config_hparam.json')
-    wandb_train(config)
+    using_wandb = True
 
-    
-    ##-- wandb Sweep Hyper Param Tuning --##
-    # config = load_hparams('config/config_sweep.json')
-    # sweep_id = wandb.sweep(config, project=wandb_project)
-    # wandb.agent(sweep_id, wandb_train)
+    if using_wandb == True:
+        config = load_hparams('config/config_hparam.json')
+        main_wandb(config)
+
+        ##-- wandb Sweep Hyper Param Tuning --##
+        # config = load_hparams('config/config_sweep.json')
+        # config_dictx = DictX(config)
+        # sweep_id = wandb.sweep(config, project=config_dictx.name)
+        # wandb.agent(sweep_id, main_wandb)
+
+    else:
+        config = load_hparams('config/config_hparam.json')
+        main_default(config)

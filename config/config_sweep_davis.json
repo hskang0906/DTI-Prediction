@@ -1,33 +1,36 @@
 {
-    "name": "Non_Pretrain_randfive",
+    "name": "biomarker_davis",
     "method": "grid",
     "metric": {
         "name": "valid_auroc",
         "goal": "maximize"
     },
     "parameters":{
+
+        "d_model_name" : {
+            "value": "seyonec/PubChem10M_SMILES_BPE_450k"
+        },
+        
+	    "p_model_name" : {
+            "value": "Rostlab/prot_bert_bfd"
+        },
+
+        "gpu_ids" : {
+            "value": "1,2,3,4"
+        },
+        "model_mode" :{
+            "value": "train"
+        },
+        "load_checkpoint" : {
+            "value": "./checkpoint/bindingDB/epoch=33-step=13463.ckpt"
+        },
+
+
         "prot_maxlength" : {
             "value":545
         },
         "layer_limit" : {
             "value": true
-        },
-        "gpu_ids" : {
-            "value" : "1,2,3,4"
-        },
-        "model_mode" :{
-            "value" : "train"
-        },
-
-        "d_pretrained": {
-            "value" : false
-        },
-    
-        "p_pretrained":{
-            "value" : false
-        },
-        "seed":{
-            "values": [6962, 8596, 8595, 9095, 8604]
         },
         
         "max_epoch": {
@@ -39,10 +42,9 @@
         "num_workers": {
             "value": 16
         },
-        
 
         "task_name" :{
-            "value" : "bindingdb"
+            "value" : "davis"
         },
         "lr": {
             "value": 5e-6
@@ -55,6 +57,16 @@
         },
         "loss_fn": {
             "value": "smooth"
+        },
+
+        "traindata_rate" : {
+            "value": 1.0
+        },
+	    "pretrained": {
+            "value" : {"chem": true, "prot": true}
+        },
+        "seed":{
+            "values": [7023, 612, 33, 26, 35]
         }
     }
 }
