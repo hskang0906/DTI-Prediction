@@ -1,5 +1,5 @@
 from curses import delay_output
-import gc
+import gc, os
 from turtle import forward
 import numpy as np
 import pandas as pd
@@ -162,7 +162,7 @@ class BiomarkerModel(pl.LightningModule):
         self.loss_fn = loss_fn
         self.criterion = torch.nn.BCEWithLogitsLoss()
         self.criterion_smooth = torch.nn.SmoothL1Loss()
-        self.sigmoid = nn.Sigmoid()
+        # self.sigmoid = nn.Sigmoid()
 
         #-- Pretrained Model Setting
         drug_config = AutoConfig.from_pretrained(drug_model_name)
@@ -229,7 +229,6 @@ class BiomarkerModel(pl.LightningModule):
         labels = batch[4]
 
         output = self(drug_inputs, prot_inputs)
-        output = self.sigmoid(output)
         logits = output.squeeze(dim=1)
         
         if self.loss_fn == 'BCE':
@@ -247,7 +246,6 @@ class BiomarkerModel(pl.LightningModule):
         labels = batch[4]
         
         output = self(drug_inputs, prot_inputs)
-        output = self.sigmoid(output)
         logits = output.squeeze(dim=1)
 
         if self.loss_fn == 'BCE':
@@ -278,7 +276,6 @@ class BiomarkerModel(pl.LightningModule):
         labels = batch[4]
 
         output = self(drug_inputs, prot_inputs)
-        output = self.sigmoid(output)
         logits = output.squeeze(dim=1)
 
         if self.loss_fn == 'BCE':
@@ -397,7 +394,7 @@ def main_wandb(config=None):
         if config is not None:
             wandb.init(config=config, project=project_name)
         else:
-            wandb.init()
+            wandb.init(settings=wandb.Settings(console='off'))
 
         config = wandb.config
         pl.seed_everything(seed=config.num_seed)
@@ -485,16 +482,16 @@ if __name__ == '__main__':
     using_wandb = True
 
     if using_wandb == True:
-        ##-- hyper param config file Load --##
-        # config = load_hparams('config/config_hparam.json')
-        # project_name = config["name"]
-        # main_wandb(config)
+        #-- hyper param config file Load --##
+        config = load_hparams('config/config_hparam.json')
+        project_name = config["name"]
+        main_wandb(config)
 
         ##-- wandb Sweep Hyper Param Tuning --##
-        config = load_hparams('config/config_sweep_davis.json')
-        project_name = config["name"]
-        sweep_id = wandb.sweep(config, project=project_name)
-        wandb.agent(sweep_id, main_wandb)
+        # config = load_hparams('config/config_sweep_bindingDB.json')
+        # project_name = config["name"]
+        # sweep_id = wandb.sweep(config, project=project_name)
+        # wandb.agent(sweep_id, main_wandb)
 
     else:
         config = load_hparams('config/config_hparam.json')

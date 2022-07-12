@@ -16,7 +16,7 @@
         },
 
         "gpu_ids" : {
-            "value": "1,2,3,4"
+            "value": "4,5,6,7"
         },
         "model_mode" :{
             "value": "train"
@@ -37,7 +37,7 @@
             "value": 50
         },
         "batch_size": {
-            "value": 32
+            "value": 56
         },
         "num_workers": {
             "value": 16
