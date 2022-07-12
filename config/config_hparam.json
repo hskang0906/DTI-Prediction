@@ -1,5 +1,5 @@
 {
-	"project": "biomarker_log",
+	"name": "biomarker_log",
 
 	"d_model_name" : "seyonec/PubChem10M_SMILES_BPE_450k",
 	"p_model_name" : "Rostlab/prot_bert_bfd",

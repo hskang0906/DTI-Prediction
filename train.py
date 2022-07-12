@@ -162,6 +162,7 @@ class BiomarkerModel(pl.LightningModule):
         self.loss_fn = loss_fn
         self.criterion = torch.nn.BCEWithLogitsLoss()
         self.criterion_smooth = torch.nn.SmoothL1Loss()
+        self.sigmoid = nn.Sigmoid()
 
         #-- Pretrained Model Setting
         drug_config = AutoConfig.from_pretrained(drug_model_name)
@@ -228,7 +229,7 @@ class BiomarkerModel(pl.LightningModule):
         labels = batch[4]
 
         output = self(drug_inputs, prot_inputs)
-        output = nn.Sigmoid(output)
+        output = self.sigmoid(output)
         logits = output.squeeze(dim=1)
         
         if self.loss_fn == 'BCE':
@@ -239,8 +240,6 @@ class BiomarkerModel(pl.LightningModule):
         self.log("train_loss", loss)
         return {"loss": loss}
 
-    # def training_step_end(self, outputs):
-    #     return {"loss": outputs["loss"]}
 
     def validation_step(self, batch, batch_idx):
         drug_inputs = {'input_ids': batch[0], 'attention_mask': batch[1]}
@@ -248,7 +247,7 @@ class BiomarkerModel(pl.LightningModule):
         labels = batch[4]
         
         output = self(drug_inputs, prot_inputs)
-        output = nn.Sigmoid(output)
+        output = self.sigmoid(output)
         logits = output.squeeze(dim=1)
 
         if self.loss_fn == 'BCE':
@@ -279,7 +278,7 @@ class BiomarkerModel(pl.LightningModule):
         labels = batch[4]
 
         output = self(drug_inputs, prot_inputs)
-        output = nn.Sigmoid(output)
+        output = self.sigmoid(output)
         logits = output.squeeze(dim=1)
 
         if self.loss_fn == 'BCE':
@@ -396,10 +395,10 @@ class BiomarkerModel(pl.LightningModule):
 def main_wandb(config=None):
     try:
         if config is not None:
-            wandb.init(config=config, project=config["project"])
+            wandb.init(config=config, project=project_name)
         else:
             wandb.init()
-        
+
         config = wandb.config
         pl.seed_everything(seed=config.num_seed)
 
@@ -409,7 +408,7 @@ def main_wandb(config=None):
         dm.setup()
 
         model_type = str(config.pretrained['chem'])+"To"+str(config.pretrained['prot'])
-        model_logger = WandbLogger(project=config.project)
+        model_logger = WandbLogger(project=project_name)
         checkpoint_callback = ModelCheckpoint(f"{config.task_name}_{model_type}_{config.lr}_{config.num_seed}", save_top_k=1, monitor="valid_auroc", mode="max")
     
         trainer = pl.Trainer(gpus=config.gpu_ids,
@@ -483,18 +482,19 @@ def main_default(config):
 
 
 if __name__ == '__main__':
-    ##-- hyper param config file Load --##
     using_wandb = True
 
     if using_wandb == True:
-        config = load_hparams('config/config_hparam.json')
-        main_wandb(config)
+        ##-- hyper param config file Load --##
+        # config = load_hparams('config/config_hparam.json')
+        # project_name = config["name"]
+        # main_wandb(config)
 
         ##-- wandb Sweep Hyper Param Tuning --##
-        # config = load_hparams('config/config_sweep.json')
-        # config_dictx = DictX(config)
-        # sweep_id = wandb.sweep(config, project=config_dictx.name)
-        # wandb.agent(sweep_id, main_wandb)
+        config = load_hparams('config/config_sweep_davis.json')
+        project_name = config["name"]
+        sweep_id = wandb.sweep(config, project=project_name)
+        wandb.agent(sweep_id, main_wandb)
 
     else:
         config = load_hparams('config/config_hparam.json')

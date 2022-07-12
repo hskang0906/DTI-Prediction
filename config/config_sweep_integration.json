@@ -63,9 +63,9 @@
             "value": 1.0
         },
 	    "pretrained": {
-            "value" : {"chem": true, "prot": true}
+            "values": [{"chem": true, "prot": true}, {"chem": false, "prot": true}, {"chem": true, "prot": false}, {"chem": false, "prot": false}]
         },
-        "seed":{
+        "num_seed":{
             "values": [6962, 8596, 8595, 9095, 8604]
         }
     }

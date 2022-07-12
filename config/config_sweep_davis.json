@@ -16,7 +16,7 @@
         },
 
         "gpu_ids" : {
-            "value": "1,2,3,4"
+            "value": "2,3"
         },
         "model_mode" :{
             "value": "train"
@@ -27,7 +27,7 @@
 
 
         "prot_maxlength" : {
-            "value":545
+            "value": 545
         },
         "layer_limit" : {
             "value": true
@@ -37,10 +37,10 @@
             "value": 50
         },
         "batch_size": {
-            "value": 32
+            "value": 26
         },
         "num_workers": {
-            "value": 16
+            "value": 32
         },
 
         "task_name" :{
@@ -63,9 +63,9 @@
             "value": 1.0
         },
 	    "pretrained": {
-            "value" : {"chem": true, "prot": true}
+            "values": [{"chem": true, "prot": true}, {"chem": false, "prot": true}, {"chem": true, "prot": false}, {"chem": false, "prot": false}]
         },
-        "seed":{
+        "num_seed":{
             "values": [7023, 612, 33, 26, 35]
         }
     }
