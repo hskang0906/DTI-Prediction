@@ -1,0 +1,25 @@
+{
+	"name": "biomarker_regression",
+
+	"d_model_name" : "seyonec/PubChem10M_SMILES_BPE_450k",
+	"p_model_name" : "Rostlab/prot_bert_bfd",
+	
+	"gpu_ids" : "0,1,2,3",
+	"model_mode" : "test",
+
+	"prot_maxlength" : 545,
+
+	"max_epoch": 50,
+	"batch_size": 32,
+	"num_workers": 32,
+
+	"task_name" : "bindingDB",
+
+	"lr": 5e-6,
+	"layer_features" : [768, 32, 1],
+	"dropout" : 0.1,
+
+    "pretrained": {"chem": true, "prot": true},
+	"num_seed" : 8595
+}
+
