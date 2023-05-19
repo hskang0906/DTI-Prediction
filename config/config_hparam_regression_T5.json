@@ -1,0 +1,27 @@
+{
+	"name": "BindingAffinity_T5",
+
+	"d_model_name" : "seyonec/PubChem10M_SMILES_BPE_450k",
+	"p_model_name" : "Rostlab/prot_bert_bfd",
+	"use_T5Model": true,
+	
+	"gpu_ids" : "0,1",
+	"model_mode" : "train",
+
+	"drug_maxlength" : 512,
+	"prot_maxlength" : 545,
+
+	"max_epoch": 20,
+	"batch_size": 32,
+	"num_workers": 8,
+
+	"task_name" : "bindingDB",
+	"lr": 5e-6,
+	"layer_features" : [768, 32, 1],
+	"dropout" : 0.1,
+	"loss_fn" : "smooth",
+
+	"pretrained": {"chem": true, "prot": true},
+	"num_seed" : 9095
+}
+

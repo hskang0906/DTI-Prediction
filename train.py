@@ -408,12 +408,13 @@ def main_wandb(config=None):
         model_logger = WandbLogger(project=project_name)
         checkpoint_callback = ModelCheckpoint(f"{config.task_name}_{model_type}_{config.lr}_{config.num_seed}", save_top_k=1, monitor="valid_auroc", mode="max")
     
-        trainer = pl.Trainer(gpus=config.gpu_ids,
+        trainer = pl.Trainer(devices=config.gpu_ids,
                              max_epochs=config.max_epoch,
                              precision=16,
                              logger=model_logger,
                              callbacks=[checkpoint_callback],
-                             accelerator='dp'
+                             accelerator='gpu', 
+                             strategy='dp' 
                              )
 
 
@@ -450,12 +451,13 @@ def main_default(config):
         model_logger = TensorBoardLogger("./log", name=f"{config.task_name}_{model_type}_{config.num_seed}")
         checkpoint_callback = ModelCheckpoint(f"{config.task_name}_{model_type}_{config.lr}_{config.num_seed}", save_top_k=1, monitor="valid_auroc", mode="max")
     
-        trainer = pl.Trainer(gpus=config.gpu_ids,
+        trainer = pl.Trainer(devices=config.gpu_ids,
                              max_epochs=config.max_epoch,
                              precision=16,
                              logger=model_logger,
                              callbacks=[checkpoint_callback],
-                             accelerator='dp'
+                             accelerator='gpu', 
+                             strategy='dp' 
                              )
 
 

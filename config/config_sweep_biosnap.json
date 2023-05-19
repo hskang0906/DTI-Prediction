@@ -2,7 +2,7 @@
     "name": "biomarker_biosnap",
     "method": "grid",
     "metric": {
-        "name": "valid_auroc",
+        "name": "valid_MSE",
         "goal": "maximize"
     },
     "parameters":{
@@ -16,7 +16,7 @@
         },
 
         "gpu_ids" : {
-            "value": "1,2,3,4"
+            "value": "0,1,2,3"
         },
         "model_mode" :{
             "value": "train"

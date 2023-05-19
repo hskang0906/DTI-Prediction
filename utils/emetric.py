@@ -1,4 +1,5 @@
 import numpy as np
+from sklearn.metrics import mean_squared_error
 
 def get_cindex(Y, P):
     summ = 0
@@ -12,7 +13,7 @@ def get_cindex(Y, P):
                     summ +=  1* (P[i] > P[j]) + 0.5 * (P[i] == P[j])
         
             
-    if pair is not 0:
+    if pair != 0:
         return summ/pair
     else:
         return 0
@@ -57,3 +58,12 @@ def get_rm2(ys_orig,ys_line):
     r02 = squared_error_zero(ys_orig, ys_line)
 
     return r2 * (1 - np.sqrt(np.absolute((r2*r2)-(r02*r02))))
+
+
+def regression_score(y_pred, y_label):
+
+    ci_score = get_cindex(y_label, y_pred)
+    MSE_score = mean_squared_error(y_label, y_pred)
+    rm2_score = get_rm2(y_label, y_pred)
+
+    return MSE_score, rm2_score, ci_score

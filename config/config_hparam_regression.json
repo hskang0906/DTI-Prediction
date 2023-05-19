@@ -2,16 +2,18 @@
 	"name": "biomarker_regression",
 
 	"d_model_name" : "seyonec/PubChem10M_SMILES_BPE_450k",
-	"p_model_name" : "Rostlab/prot_bert_bfd",
+	"p_model_name" : "Rostlab/prot_electra_discriminator_bfd",
+	"use_T5Model": false,
 	
-	"gpu_ids" : "0,1,2,3",
-	"model_mode" : "test",
+	"gpu_ids" : "0,1,2,3,4,5,6,7",
+	"model_mode" : "train",
 
+	"drug_maxlength" : 512,
 	"prot_maxlength" : 545,
 
 	"max_epoch": 50,
-	"batch_size": 32,
-	"num_workers": 32,
+	"batch_size": 64,
+	"num_workers": 8,
 
 	"task_name" : "bindingDB",
 

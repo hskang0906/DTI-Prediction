@@ -1,3 +1,4 @@
+import os
 import glob
 import numpy as np
 import pandas as pd
@@ -5,7 +6,10 @@ import wandb
 
 from utils.utils import *
 from utils.attention_flow import *
-from utils.emetric import get_cindex, get_rm2
+from utils.emetric import regression_score
+
+from module.model import BApredictModel
+from module.datamodule import BAPredictDataModule
 
 import torch
 import torch.nn as nn
@@ -14,41 +18,30 @@ from torch.utils.data import Dataset, DataLoader
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
-from transformers import AutoTokenizer
-from train import BiomarkerModel
+from transformers import AutoTokenizer, AutoConfig, RobertaModel, BertModel, AutoModel
 
-from sklearn.metrics import mean_squared_error
+## -- Logger Type -- ##
+TENSOR = 0
+WANDB = 1
+SWEEP = 2
 
 class DTIpredictDataset(Dataset):
-    def __init__(self, list_IDs, labels, df_dti, d_tokenizer, p_tokenizer, prot_maxLength):
+    def __init__(self, drug_input, prot_input, labels):
         'Initialization'
         self.labels = labels
-        self.list_IDs = list_IDs
-        self.df = df_dti
-
-        self.d_tokenizer = d_tokenizer
-        self.p_tokenizer = p_tokenizer
-
-        self.prot_maxLength = prot_maxLength
+        self.drug_input = drug_input
+        self.prot_input = prot_input
 
     def __len__(self):
         'Denotes the total number of samples'
-        return len(self.list_IDs)
+        return len(self.labels)
 
     def __getitem__(self, index):
         'Generates one sample of data'
-        index = self.list_IDs[index]
-        drug_data = self.df.iloc[index]['Drug']
-        prot_data = self.df.iloc[index]['Target']
-        prot_data = ' '.join(list(prot_data))
-
-        d_inputs = self.d_tokenizer(drug_data, padding='max_length', max_length=510, truncation=True, return_tensors="pt")
-        p_inputs = self.p_tokenizer(prot_data, padding='max_length', max_length=self.prot_maxLength, truncation=True, return_tensors="pt")
-
-        d_input_ids = d_inputs['input_ids'].squeeze()
-        d_attention_mask = d_inputs['attention_mask'].squeeze()
-        p_input_ids = p_inputs['input_ids'].squeeze()
-        p_attention_mask = p_inputs['attention_mask'].squeeze()
+        d_input_ids = self.drug_input['input_ids'][index]
+        d_attention_mask = self.drug_input['attention_mask'][index]
+        p_input_ids = self.prot_input['input_ids'][index]
+        p_attention_mask = self.prot_input['attention_mask'][index]
 
         labels = torch.as_tensor(self.labels[index], dtype=torch.float)
 
@@ -57,13 +50,14 @@ class DTIpredictDataset(Dataset):
 
 
 class DTIpredictDataModule(pl.LightningDataModule):
-    def __init__(self, task_name, drug_model_name, prot_model_name, num_workers, batch_size, prot_maxLength=545):
+    def __init__(self, task_name, drug_model_name, prot_model_name, num_workers, batch_size, prot_maxLength=545, drug_maxLength=512):
         super().__init__()
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.task_name = task_name
 
         self.prot_maxLength = prot_maxLength
+        self.drug_maxLength = drug_maxLength - 2
         
         self.d_tokenizer = AutoTokenizer.from_pretrained(drug_model_name)
         self.p_tokenizer = AutoTokenizer.from_pretrained(prot_model_name)
@@ -73,45 +67,53 @@ class DTIpredictDataModule(pl.LightningDataModule):
         self.df_test = None
 
         self.load_testData = True
-
-        self.train_dataset = None
-        self.valid_dataset = None
-        self.test_dataset = None
+        self.load_dataset = False
 
     def get_task(self, task_name):
-        if task_name.lower() == 'biosnap':
-            return './dataset/BIOSNAP/full_data'
-        elif task_name.lower() == 'bindingdb':
-            return './dataset/BindingDB'
+        if task_name.lower() == 'bindingdb':
+            return './dataset_kd/BindingDB'
         elif task_name.lower() == 'davis':
-            return './dataset/DAVIS'
+            return './dataset_kd/DAVIS'
+        elif task_name.lower() == 'merge':
+            self.load_testData = False
+            return './dataset_kd/MergeDataset'
+
+    def tokenization_dataset(self, df_load:pd.DataFrame):
+        df_drug = np.array(df_load['Drug']).tolist()
+        df_prot = np.array(df_load['Drug']).tolist()
+        df_prot = [' '.join(list(aas)) for aas in df_prot]
+        label = np.array(df_load['Y']).tolist()
+
+        drug_obj = self.d_tokenizer(df_drug, padding='max_length', max_length=self.drug_maxLength, truncation=True, return_tensors="pt")
+        prot_obj = self.p_tokenizer(df_prot, padding='max_length', max_length=self.prot_maxLength, truncation=True, return_tensors="pt")
+        
+
+        return drug_obj, prot_obj, label
 
     def prepare_data(self):
         # Use this method to do things that might write to disk or that need to be done only from
         # a single process in distributed settings.
-        dataFolder = self.get_task(self.task_name)
+        if self.load_dataset is False:
+            dataFolder = self.get_task(self.task_name)
 
-        self.df_train = pd.read_csv(dataFolder + '/train.csv')
-        self.df_val = pd.read_csv(dataFolder + '/val.csv')
+            df_train = pd.read_csv(dataFolder + '/train.csv')
+            df_valid = pd.read_csv(dataFolder + '/valid.csv')
+            df_test = pd.read_csv(dataFolder + '/test.csv')
 
-        traindata_length = int(len(self.df_train))
-        validdata_length = int(len(self.df_val))
-
-        self.df_train = self.df_train[:traindata_length]
-        self.df_val = self.df_val[:validdata_length]
-
-        self.df_test = pd.read_csv(dataFolder + '/test.csv')
+            ## -- tokenization dataset -- ##
+            self.drug_train, self.prot_train, self.train_label= self.tokenization_dataset(df_train)
+            self.drug_valid, self.prot_valid, self.valid_label= self.tokenization_dataset(df_valid)
+            self.drug_test, self.prot_test, self.test_label= self.tokenization_dataset(df_test)
+            
+            self.load_dataset = True
 
     def setup(self, stage=None):
         if stage == 'fit' or stage is None:
-            self.train_dataset = DTIpredictDataset(self.df_train.index.values, self.df_train.Y.values, self.df_train,
-                                                  self.d_tokenizer, self.p_tokenizer, self.prot_maxLength)
-            self.valid_dataset = DTIpredictDataset(self.df_val.index.values, self.df_val.Y.values, self.df_val,
-                                                  self.d_tokenizer, self.p_tokenizer, self.prot_maxLength)
+            self.train_dataset = DTIpredictDataset(self.drug_train, self.prot_train, self.train_label)
+            self.valid_dataset = DTIpredictDataset(self.drug_valid, self.prot_valid, self.valid_label)
 
         if self.load_testData is True:
-            self.test_dataset = DTIpredictDataset(self.df_test.index.values, self.df_test.Y.values, self.df_test,
-                                                self.d_tokenizer, self.p_tokenizer, self.prot_maxLength)
+            self.test_dataset = DTIpredictDataset(self.drug_test, self.prot_test, self.test_label)
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
@@ -124,13 +126,25 @@ class DTIpredictDataModule(pl.LightningDataModule):
 
 
 class DTIpredictModel(pl.LightningModule):
-    def __init__(self, DTI_model, lr, dropout, layer_features):
+    def __init__(self, lr, dropout, layer_features,
+                 drug_model_name, prot_model_name, 
+                 d_pretrained:bool=True, p_pretrained:bool=True):
         super().__init__()
         self.lr = lr
         self.criterion = torch.nn.SmoothL1Loss()
 
         #-- Pretrained Model Setting
-        self.model = BiomarkerModel.load_from_checkpoint(DTI_model)
+        drug_config = AutoConfig.from_pretrained(drug_model_name)
+        self.d_model = AutoModel(drug_config) if d_pretrained is False else AutoModel.from_pretrained(drug_model_name, num_labels=2,
+                                                                                                        output_hidden_states=True,
+                                                                                                        output_attentions=True)
+        prot_config = AutoConfig.from_pretrained(prot_model_name)
+        self.p_model = AutoModel(prot_config) if p_pretrained is False else AutoModel.from_pretrained(prot_model_name,
+                                                                                                        output_hidden_states=True,
+                                                                                                        output_attentions=True)
+        self.p_model = deleteEncodingLayers(self.p_model, 18)
+
+        # self.model = BiomarkerModel.load_from_checkpoint(DTI_model)
 
         #-- Decoder Layer Setting
         layers = []
@@ -149,9 +163,13 @@ class DTIpredictModel(pl.LightningModule):
         self.save_hyperparameters()
 
     def forward(self, drug_inputs, prot_inputs):
-        outputs = self.model(drug_inputs, prot_inputs)
+        d_outputs = self.d_model(drug_inputs['input_ids'], drug_inputs['attention_mask'])
+        p_outputs = self.p_model(prot_inputs['input_ids'], prot_inputs['attention_mask'])
 
-        return outputs
+        output = torch.cat((d_outputs.last_hidden_state[:, 0], p_outputs.last_hidden_state[:, 0]), dim=1)
+        output = self.decoder(output)    
+
+        return output
 
     def training_step(self, batch, batch_idx):
         drug_inputs = {'input_ids': batch[0], 'attention_mask': batch[1]}
@@ -187,7 +205,10 @@ class DTIpredictModel(pl.LightningModule):
         preds = self.convert_outputs_to_preds(outputs)
         labels = torch.as_tensor(torch.cat([output['labels'] for output in outputs], dim=0), dtype=torch.int)
 
-        MSE_score, rm2_score, ci_score = self.regression_score(preds, labels)
+        y_pred = preds.detach().cpu().numpy()
+        y_label = labels.detach().cpu().numpy()
+
+        MSE_score, rm2_score, ci_score = regression_score(y_pred, y_label)
                    
         self.log("valid_MSE", MSE_score, on_step=False, on_epoch=True, logger=True)
         self.log("valid_rm2", rm2_score, on_step=False, on_epoch=True, logger=True)
@@ -213,7 +234,14 @@ class DTIpredictModel(pl.LightningModule):
         preds = self.convert_outputs_to_preds(outputs)
         labels = torch.as_tensor(torch.cat([output['labels'] for output in outputs], dim=0), dtype=torch.int)
 
-        MSE_score, rm2_score, ci_score = self.regression_score(preds, labels)
+        y_pred = preds.detach().cpu().numpy()
+        y_label = labels.detach().cpu().numpy()
+
+        MSE_score, rm2_score, ci_score = regression_score(y_pred, y_label)
+
+        print(f'CI_score : {ci_score}')
+        print(f'MSE_score : {MSE_score}')
+        print(f'rm2_score : {rm2_score}')
 
         self.log("test_MSE", MSE_score, on_step=False, on_epoch=True, logger=True)
         self.log("test_rm2", rm2_score, on_step=False, on_epoch=True, logger=True)
@@ -241,61 +269,63 @@ class DTIpredictModel(pl.LightningModule):
     def convert_outputs_to_preds(self, outputs):
         logits = torch.cat([output['logits'] for output in outputs], dim=0)
         return logits
+    
 
-    def regression_score(self, preds, labels):
-        y_pred = preds.detach().cpu().numpy()
-        y_label = labels.detach().cpu().numpy()
-
-        ci_score = get_cindex(y_label, y_pred)
-        MSE_score = mean_squared_error(y_label, y_pred)
-        rm2_score = get_rm2(y_label, y_pred)
-
-        print(f'CI_score : {ci_score}')
-        print(f'MSE_score : {MSE_score}')
-        print(f'rm2_score : {rm2_score}')
-
-        regression_metric.append({"MSE_score": MSE_score, "rm2_score": rm2_score, "CI_score": ci_score})
-
-        return MSE_score, rm2_score, ci_score
-
-
-def main_wandb(config=None):
-    try:
-        if config is not None:
-            wandb.init(config=config, project=project_name)
+def main(config=None):
+    try: 
+        ##-- hyper param config file Load --##
+        if run_type == TENSOR:
+            config = DictX(config)
         else:
-            wandb.init(settings=wandb.Settings(console='off'))
+            if config is not None:
+                wandb.init(config=config, project=project_name)
+            else:
+                wandb.init(settings=wandb.Settings(console='off'))  
 
-        config = wandb.config
+            config = wandb.config
+
+        os.environ["TOKENIZERS_PARALLELISM"] = "true"
         pl.seed_everything(seed=config.num_seed)
 
-        DTImodel_types = ["FalseToFalse", "TrueToFalse", "FalseToTrue", "TrueToTrue"]
         DTImodel_seed = {"biosnap":"4183", "davis":"612", "bindingDB":"8595", "merge":"6962"}
+        model_type = str(config.pretrained['chem'])+"To"+str(config.pretrained['prot'])
+        
+        log_path = "./log"
+        version_name = f"{config.task_name}_{model_type}_{config.num_seed}"
 
-        modeltype = DTImodel_types[3]
+        if run_type == TENSOR:
+            model_logger = TensorBoardLogger(save_dir=log_path, name=version_name)
+        else:
+            model_logger = WandbLogger(project=project_name, save_dir=log_path, version=version_name)
 
-        dm = DTIpredictDataModule(config.task_name, config.d_model_name, config.p_model_name,
-                                 config.num_workers, config.batch_size, config.prot_maxlength)
+        
+
+        dm = BAPredictDataModule(config.num_workers, config.batch_size, config.task_name, 
+                                 config.d_model_name, config.p_model_name, 
+                                 config.prot_maxlength, config.drug_maxlength)
         dm.prepare_data()
         dm.setup()
 
-        model_logger = WandbLogger(project=f"./log/{project_name}")
-        checkpoint_callback = ModelCheckpoint(f"{config.task_name}_{modeltype}_regression", monitor="valid_auroc", mode="max")
-    
-        trainer = pl.Trainer(gpus=config.gpu_ids,
+        checkpoint_callback = ModelCheckpoint(f"{config.task_name}_{model_type}_regression", monitor="valid_MSE", mode="min")
+        early_stop_callback = EarlyStopping(monitor="valid_loss", min_delta=0.01, patience=10, verbose=10, mode="min")
+
+        trainer = pl.Trainer(devices=config.gpu_ids,
                              max_epochs=config.max_epoch,
                              precision=16,
                              logger=model_logger,
-                             callbacks=[checkpoint_callback],
-                             accelerator='dp'
+                             callbacks=[checkpoint_callback, early_stop_callback],
+                             accelerator='gpu', 
+                             strategy='dp' 
                              )
         
-        model_file = f"./log/{config.task_name}_{modeltype}_{config.lr}_{DTImodel_seed[config.task_name]}/*.ckpt"
-        model_file = glob.glob(model_file)
-        DTIModel = model_file[0]
+        # model_file = f"./log/{config.task_name}_{modeltype}_{config.lr}_{DTImodel_seed[config.task_name]}/*.ckpt"
+        # model_file = glob.glob(model_file)
+        # DTIModel = model_file[0]
 
         if config.model_mode == "train":
-            model = DTIpredictModel(DTIModel, config.lr, config.dropout, config.layer_features)
+            model = BApredictModel(config.lr, config.dropout, config.layer_features,
+                                    config.d_model_name, config.p_model_name, 
+                                    config.pretrained['chem'], config.pretrained['prot'])
             model.train()
             trainer.fit(model, datamodule=dm)
 
@@ -307,62 +337,7 @@ def main_wandb(config=None):
             
             for testmodel_type in testmodel_types:
                 model_file = f"./log/{config.task_name}_{testmodel_type}_regression/*.ckpt"
-
-                model = BiomarkerModel.load_from_checkpoint(model_file)
-                
-                model.eval()
-                trainer.test(model, datamodule=dm)
-
-    except Exception as e:
-        print(e)
-
-
-def main_default(config):
-    try:
-        config = DictX(config)
-        pl.seed_everything(seed=config.num_seed)
-    
-        dm = DTIpredictDataModule(config.task_name, config.d_model_name, config.p_model_name,
-                                 config.num_workers, config.batch_size, config.prot_maxlength)
-        dm.prepare_data()
-        dm.setup()
-
-        DTImodel_types = ["FalseToFalse", "TrueToFalse", "FalseToTrue", "TrueToTrue"]
-        DTImodel_seed = {"biosnap":"4183", "davis":"612", "bindingDB":"8595", "merge":"6962"}
-
-        modeltype = DTImodel_types[3]
-
-        model_logger = TensorBoardLogger("./log", name=f"{config.task_name}_{modeltype}_{config.num_seed}_regression")
-        checkpoint_callback = ModelCheckpoint(f"{config.task_name}_{modeltype}_regression", monitor="valid_auroc", mode="max")
-    
-        trainer = pl.Trainer(gpus=config.gpu_ids,
-                             max_epochs=config.max_epoch,
-                             precision=16,
-                             logger=model_logger,
-                             callbacks=[checkpoint_callback],
-                             accelerator='dp'
-                             )
-
-        model_file = f"./log/{config.task_name}_{modeltype}_{config.lr}_{DTImodel_seed[config.task_name]}/*.ckpt"
-        model_file = glob.glob(model_file)
-
-        DTIModel = model_file[0]
-
-        if config.model_mode == "train":
-            model = DTIpredictModel(DTIModel, config.lr, config.dropout, config.layer_features)
-            model.train()
-            trainer.fit(model, datamodule=dm)
-
-            model.eval()
-            trainer.test(model, datamodule=dm)
-
-        else:
-            testmodel_types = ["TrueToTrue", "TrueToFalse", "FalseToTrue", "FalseToFalse"]
-            
-            for testmodel_type in testmodel_types:
-                model_file = f"./log/{config.task_name}_{testmodel_type}_regression/*.ckpt"
-
-                model = BiomarkerModel.load_from_checkpoint(model_file)
+                model = BApredictModel.load_from_checkpoint(model_file)
                 
                 model.eval()
                 trainer.test(model, datamodule=dm)
@@ -372,26 +347,25 @@ def main_default(config):
 
 
 if __name__ == '__main__':
-    using_wandb = False
+    run_type = SWEEP
     regression_metric = []
 
-    if using_wandb == True:
-        #-- hyper param config file Load --##
-        config = load_hparams('config/config_hparam.json')
+    if run_type == SWEEP:
+        config = load_hparams('config/sweep/config_hparam_regression.json')
         project_name = config["name"]
-        main_wandb(config)
-
-        ##-- wandb Sweep Hyper Param Tuning --##
-        # config = load_hparams('config/config_sweep_bindingDB.json')
-        # project_name = config["name"]
-        # sweep_id = wandb.sweep(config, project=project_name)
-        # wandb.agent(sweep_id, main_wandb)
-
+        sweep_id = wandb.sweep(config, project=project_name)
+        wandb.agent(sweep_id, main)
+    
     else:
-        config = load_hparams('config/config_hparam.json')
-        main_default(config)
+        config = load_hparams('config/config_hparam_regression.json')
+        project_name = config["name"]
+        main(config)
 
-        # if config["model_mode"] == "test":
-        #     df = pd.DataFrame(regression_metric)
-        #     df.to_csv(f'./results/metric_result/regression_metric_{config["task_name"]}to{config["testdata_name"]}.csv', index=None)
-        #     print(df)
+        if config["model_mode"] == "test":
+            df = pd.DataFrame(regression_metric)
+            result_path = f'./results/metric_result/'
+            if not os.path.exists(result_path):
+                os.makedirs(result_path)
+
+            df.to_csv(os.path.join(result_path, f'/regression_metric_{config["task_name"]}to{config["testdata_name"]}.csv'), index=None)
+            print(df)
