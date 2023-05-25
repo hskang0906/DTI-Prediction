@@ -51,8 +51,8 @@ def main(config=None):
         dm.prepare_data()
         dm.setup()
 
-        checkpoint_callback = ModelCheckpoint(f"{config.task_name}_{model_type}_regression", monitor="valid_MSE", mode="min")
-        early_stop_callback = EarlyStopping(monitor="valid_loss", min_delta=0.01, patience=10, verbose=10, mode="min")
+        checkpoint_callback = ModelCheckpoint(f"{config.task_name}_{model_type}_T5_regression", monitor="valid_MSE", mode="min")
+        early_stop_callback = EarlyStopping(monitor="valid_loss", min_delta=0.01, patience=3, verbose=False, mode="min")
 
         trainer = pl.Trainer(devices=config.gpu_ids,
                              max_epochs=config.max_epoch,
@@ -78,7 +78,7 @@ def main(config=None):
             testmodel_types = ["TrueToTrue", "TrueToFalse", "FalseToTrue", "FalseToFalse"]
             
             for testmodel_type in testmodel_types:
-                model_file = f"./log/{config.task_name}_{testmodel_type}_regression/*.ckpt"
+                model_file = f"./log/{config.task_name}_{testmodel_type}_T5_regression/*.ckpt"
                 model = BApredictModel.load_from_checkpoint(model_file)
                 
                 model.eval()
@@ -89,7 +89,7 @@ def main(config=None):
 
 
 if __name__ == '__main__':
-    run_type = TENSOR
+    run_type = SWEEP
 
     if run_type == SWEEP:
         config = load_hparams('config/sweep/config_hparam_regression_T5.json')

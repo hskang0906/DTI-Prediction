@@ -1,5 +1,5 @@
 {
-    "name": "BindingAffinity_sweep",
+    "name": "BindingAffinity_sweep_bert",
     "method": "grid",
     "metric": {
         "name": "valid_MSE",
@@ -7,67 +7,36 @@
     },
     "parameters":{
 
-        "d_model_name" : {
-            "value": "seyonec/PubChem10M_SMILES_BPE_450k"
-        },
-        
-	    "p_model_name" : {
-            "value": "Rostlab/prot_bert_bfd"
-        },
+        "d_model_name" : {"value": "seyonec/PubChem10M_SMILES_BPE_450k"},
+        "p_model_name" : {"value": "Rostlab/prot_bert_bfd"},
         "use_T5Model": {"value": false},
         
-        "gpu_ids" : {
-            "value": "4,5,6,7"
-        },
-
-        "model_mode" :{
-            "value": "train"
-        },
-        "load_checkpoint" : {
-            "value": "./checkpoint/bindingDB/epoch=33-step=13463.ckpt"
-        },
+        "gpu_ids" : {"value": "4,5,6,7"},
+        "model_mode" :{"value": "train"},
 
 
-        "drug_maxlength":{
-            "value":512
-        },
-        "prot_maxlength" : {
-            "value":545
-        },
+        "drug_maxlength":{"value":512},
+        "prot_maxlength" : {"value":545},
 
 
-        "layer_limit" : {
-            "value": true
-        },
-        
-        "max_epoch": {
-            "value": 50
-        },
-        "batch_size": {
-            "value": 64
-        },
-        "num_workers": {
-            "value": 8
-        },
+        "max_epoch": {"value": 20},
+        "batch_size": {"value": 64},
+        "num_workers": {"value": 8},
+
 
         "task_name" :{
             "values" : ["BindingDB", "DAVIS", "merge"]
         },
-        "lr": {
-            "value": 5e-6
-        },
-        "layer_features" : {
-            "value": [768, 32, 1]
-        },
-        "dropout" : {
-            "value": 0.1
-        },
-        "loss_fn": {
-            "value": "smooth"
-        },
 
+
+        "lr": {"value": 5e-6},
+        "layer_features" : {"value": [768, 32, 1]},
+        "dropout" : {"value": 0.1},
+        "loss_fn": {"value": "smooth"},
+
+        
 	    "pretrained": {
-            "values": [{"chem": true, "prot": true}, {"chem": false, "prot": true}, {"chem": true, "prot": false}, {"chem": false, "prot": false}]
+            "values": [{"chem": false, "prot": true}, {"chem": true, "prot": false}, {"chem": false, "prot": false}]
         },
         "num_seed":{
             "values": [4183, 2093]

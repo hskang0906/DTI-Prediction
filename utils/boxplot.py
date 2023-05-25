@@ -195,7 +195,64 @@ def go_box_plot(df, metric = ROC):
     fig.write_image(f'../figures/{file_title}', width=1.5*1200, height=0.75*1200, scale=2)
     fig.show()
 
+def get_task(task_name):
+    if task_name.lower() == 'bindingdb':
+        return '../dataset_kd/BindingDB'
+    elif task_name.lower() == 'davis':
+        return '../dataset_kd/DAVIS'
+    elif task_name.lower() == 'kiba':
+        return '../dataset_kd/KIBA'
+        
+
+def scattorplot():
+    dataset_list = ["DAVIS", "BindingDB"]
+    file_title = "kd_Scatterplot.png"
+
+    fig = make_subplots(rows=1, cols=2, subplot_titles=["<b>(A)<b>", "<b>(B)<b>"] )
+
+    for idx, dataset in enumerate(dataset_list):
+        dataset_folder = get_task(dataset)
+
+        df_predict = pd.read_csv(dataset_folder+"/predict.csv")
+        df_label = pd.read_csv(dataset_folder+"/test.csv")
+
+        df_predict["Y"] = df_predict["Y"]+2
+
+        fig.append_trace(go.Scattergl(x=df_predict["Y"],
+                                    y=df_label["Y"],
+                                    name=dataset,
+                                    showlegend = True,
+                                    mode='markers',
+                                    marker=dict(
+                                        colorscale='Viridis',
+                                        line_width=1
+                                    )),
+                                    row=1,
+                                    col=idx+1)
+
+        fig.update_xaxes(title_text="prediction", row=1, col=idx+1)
+        fig.update_yaxes(title_text="measurement", matches=f"x{idx+1}", row=1, col=idx+1)
+
+        fig.layout.annotations[idx].update(xref="paper", x=0.02 + (idx*0.55), yref="paper", y=1.03)
+
+    fig.update_layout(font=dict(
+                          size=20,
+                      ))
+
+                      
+                      
+    for i in fig['layout']['annotations']:
+        i['font'] = dict(size=35)
+
+    fig.write_image(f'../figures/{file_title}', width=1.5*1200, height=0.75*1200, scale=2)
+
 
 if __name__ == '__main__':
-    df = pd.read_csv("../dataset/wandb_export_boxplotdata.csv")
-    box_plot(df)
+    # df = pd.read_csv("../dataset/wandb_export_boxplotdata.csv")
+    # box_plot(df)
+
+    scattorplot()
+
+# if __name__ == '__main__':
+#     df = pd.read_csv("../dataset/wandb_export_boxplotdata.csv")
+#     box_plot(df)

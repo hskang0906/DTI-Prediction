@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 
 import pytorch_lightning as pl
-from transformers import AutoConfig, AutoModel, T5EncoderModel
+from transformers import AutoConfig, AutoModel, T5EncoderModel, RobertaModel, BertModel, ElectraModel
 
 from utils.emetric import regression_score
 
@@ -26,7 +26,7 @@ def deleteEncodingLayers(model, num_layers_to_keep):  # must pass in the full be
 
 class BApredictModel(pl.LightningModule):
     def __init__(self, lr, dropout, layer_features,
-                 drug_model_name, prot_model_name, use_T5Encoder:bool = False,
+                 drug_model_name, prot_model_name, use_T5Encoder:bool = False, 
                  d_pretrained:bool=True, p_pretrained:bool=True):
         super().__init__()
         self.lr = lr
@@ -34,7 +34,7 @@ class BApredictModel(pl.LightningModule):
 
         #-- Pretrained Model Setting
         drug_config = AutoConfig.from_pretrained(drug_model_name)
-        self.d_model = AutoModel(drug_config) if d_pretrained is False else AutoModel.from_pretrained(drug_model_name, num_labels=2,
+        self.d_model = AutoModel.from_config(drug_config) if d_pretrained is False else AutoModel.from_pretrained(drug_model_name, num_labels=2,
                                                                                                         output_hidden_states=True,
                                                                                                         output_attentions=True)
         prot_config = AutoConfig.from_pretrained(prot_model_name)
@@ -43,10 +43,10 @@ class BApredictModel(pl.LightningModule):
                                                                                                             output_hidden_states=True,
                                                                                                             output_attentions=True)
         else:
-            self.p_model = AutoModel(prot_config) if p_pretrained is False else AutoModel.from_pretrained(prot_model_name,
+            self.p_model = AutoModel.from_config(prot_config) if p_pretrained is False else AutoModel.from_pretrained(prot_model_name,
                                                                                                             output_hidden_states=True,
                                                                                                             output_attentions=True)
-            self.p_model = deleteEncodingLayers(self.p_model, 18)
+            self.p_model = deleteEncodingLayers(self.p_model, 12)
 
         # self.model = BiomarkerModel.load_from_checkpoint(DTI_model)
 

@@ -44,7 +44,7 @@ class BAPredictDataset(Dataset):
 class BAPredictDataModule(pl.LightningDataModule):
     def __init__(self, num_workers, batch_size, task_name, 
                  drug_model_name, prot_model_name, use_T5model:bool = False,
-                 prot_maxLength=545, drug_maxLength=512):
+                 prot_maxLength=545, drug_maxLength=512, fix_testFile = None):
         super().__init__()
         self.batch_size = batch_size
         self.num_workers = num_workers
@@ -53,6 +53,8 @@ class BAPredictDataModule(pl.LightningDataModule):
 
         self.prot_maxLength = prot_maxLength
         self.drug_maxLength = drug_maxLength - 2
+
+        self.fix_testFile = fix_testFile
         
         self.d_tokenizer = AutoTokenizer.from_pretrained(drug_model_name)
         if self.use_T5model:
@@ -87,7 +89,11 @@ class BAPredictDataModule(pl.LightningDataModule):
 
             df_train = pd.read_csv(dataFolder + '/train.csv')
             df_valid = pd.read_csv(dataFolder + '/valid.csv')
-            df_test = pd.read_csv(dataFolder + '/test.csv')
+
+            if self.fix_testFile is None:
+                df_test = pd.read_csv(dataFolder + '/test.csv')
+            else:
+                df_test = pd.read_csv(self.fix_testFile + '/test.csv')
 
             ## -- tokenization dataset -- ##
             self.drug_train, self.prot_train, self.train_label= self.tokenization_dataset(df_train)
