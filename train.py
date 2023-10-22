@@ -21,6 +21,7 @@ from transformers import AutoConfig, AutoTokenizer, RobertaModel, BertModel
 
 from sklearn.metrics import f1_score, roc_curve, precision_score, recall_score, auc
 from sklearn.metrics import roc_auc_score, average_precision_score
+from module.model import deleteEncodingLayers
 
 class BiomarkerDataset(Dataset):
     def __init__(self, list_IDs, labels, df_dti, d_tokenizer, p_tokenizer, prot_maxLength):
