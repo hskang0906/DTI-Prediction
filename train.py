@@ -482,7 +482,7 @@ def main_default(config):
 
 
 if __name__ == '__main__':
-    using_wandb = True
+    using_wandb = False
 
     if using_wandb == True:
         #-- hyper param config file Load --##
