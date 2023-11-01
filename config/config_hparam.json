@@ -4,7 +4,7 @@
   "d_model_name": "seyonec/PubChem10M_SMILES_BPE_450k",
   "p_model_name": "Rostlab/prot_bert_bfd",
 
-  "gpu_ids": "1",
+  "gpu_ids": "0,1",
   "model_mode": "train",
   "load_checkpoint": "./checkpoint/bindingDB/epoch=33-step=13463.ckpt",
 
@@ -12,7 +12,7 @@
   "layer_limit": true,
 
   "max_epoch": 50,
-  "batch_size": 2,
+  "batch_size": 10,
   "num_workers": 1,
 
   "task_name": "davis",

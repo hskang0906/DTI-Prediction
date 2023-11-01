@@ -1,15 +1,15 @@
 --extra-index-url https://download.pytorch.org/whl/cu113
-torch==1.11.0+cu113
+torch==1.12.0
 --extra-index-url https://download.pytorch.org/whl/cu113
-torchvision==0.12.0+cu113
+torchvision==0.13.0
 --extra-index-url https://download.pytorch.org/whl/cu113
-torchaudio==0.11.0
+torchaudio==0.12.0
 
 numpy
 pandas
 tqdm
 scikit-learn
-pytorch-lightning==1.8.4
+pytorch-lightning==1.9.1
 transformers
 wandb
 plotly

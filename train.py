@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from curses import delay_output
 import gc, os
 from turtle import forward
@@ -93,8 +95,8 @@ class BiomarkerDataModule(pl.LightningDataModule):
         self.prot_maxLength = prot_maxLength
         self.traindata_rate = traindata_rate
         
-        self.d_tokenizer = AutoTokenizer.from_pretrained(drug_model_name)
-        self.p_tokenizer = AutoTokenizer.from_pretrained(prot_model_name)
+        self.d_tokenizer = AutoTokenizer.from_pretrained("./offline_data/tokenizers/" + drug_model_name)
+        self.p_tokenizer = AutoTokenizer.from_pretrained("./offline_data/tokenizers/" + prot_model_name)
 
         self.df_train = None
         self.df_val = None
@@ -166,20 +168,20 @@ class BiomarkerModel(pl.LightningModule):
         # self.sigmoid = nn.Sigmoid()
 
         #-- Pretrained Model Setting
-        drug_config = AutoConfig.from_pretrained(drug_model_name)
+        drug_config = AutoConfig.from_pretrained("./offline_data/configs/" + drug_model_name)
         if d_pretrained is False:
-            self.d_model = RobertaModel(drug_config)
+            self.d_model = RobertaModel("./offline_data/models/" + drug_config)
         else:
-            self.d_model = RobertaModel.from_pretrained(drug_model_name, num_labels=2,
+            self.d_model = RobertaModel.from_pretrained("./offline_data/models/" + drug_model_name, num_labels=2,
                                                         output_hidden_states=True,
                                                         output_attentions=True)
 
-        prot_config = AutoConfig.from_pretrained(prot_model_name)
+        prot_config = AutoConfig.from_pretrained("./offline_data/configs/" + prot_model_name)
 
         if p_pretrained is False:
-            self.p_model = BertModel(prot_config)
+            self.p_model = BertModel("./offline_data/models/" + prot_config)
         else:
-            self.p_model = BertModel.from_pretrained(prot_model_name,
+            self.p_model = BertModel.from_pretrained("./offline_data/models/" + prot_model_name,
                                                         output_hidden_states=True,
                                                         output_attentions=True)
                                                         
@@ -458,7 +460,7 @@ def main_default(config):
                              logger=model_logger,
                              callbacks=[checkpoint_callback],
                              accelerator='gpu', 
-                             strategy='dp' 
+                             strategy='ddp' 
                              )
 
 
@@ -499,3 +501,4 @@ if __name__ == '__main__':
     else:
         config = load_hparams('config/config_hparam.json')
         main_default(config)
+
