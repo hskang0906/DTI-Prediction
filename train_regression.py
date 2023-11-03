@@ -8,7 +8,7 @@ from utils.utils import *
 from utils.attention_flow import *
 from utils.emetric import regression_score
 
-from module.model import BApredictModel
+from module.model import BApredictModel, deleteEncodingLayers
 from module.datamodule import BAPredictDataModule
 
 import torch
