@@ -62,7 +62,7 @@ def smiles_aas_test():
         biomarker_list = []
         biomarker_datas = []
 
-        smiles_aas = pd.read_csv('./dataset/external_dataset2.csv')
+        smiles_aas = pd.read_csv('./dataset/external_dataset_pair.csv')
         
         ## -- 1 to 1 pair predict check -- ##
         for data in smiles_aas.values:
@@ -84,8 +84,12 @@ def smiles_aas_test():
                 datas = datas + output_pred
 
         ## -- Export result data to csv -- ##
+        result_path = "./results"
+        if not os.path.exists(result_path):
+            os.makedirs(result_path)
+
         df = pd.DataFrame(datas)
-        df.to_csv('./results/predictData_nontonon_bindingdb_test.csv', index=None)
+        df.to_csv(result_path + '/predictData_DAVIS_test.csv', index=None)
 
         print(df)
         return datas
@@ -96,8 +100,8 @@ def smiles_aas_test():
 
 if __name__ == "__main__":
 
-    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    os.environ["CUDA_VISIBLE_DEVICES"] = '0,1'
+    # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    # os.environ["CUDA_VISIBLE_DEVICES"] = '0,'
 
     device_count = torch.cuda.device_count()
     device_biomarker = torch.device('cuda' if torch.cuda.is_available() else "cpu")
@@ -117,10 +121,10 @@ if __name__ == "__main__":
     ##-- hyper param config file Load --##
     config = load_hparams('config/config_hparam.json')
     config = DictX(config)
-    model = BiomarkerModel(d_model_name, p_model_name,
-                               config.lr, config.dropout, config.layer_features, config.loss_fn, config.layer_limit, config.pretrained['chem'], config.pretrained['prot']).to(device_biomarker)
+    # model = BiomarkerModel(d_model_name, p_model_name,
+    #                            config.lr, config.dropout, config.layer_features, config.loss_fn, config.layer_limit, config.pretrained['chem'], config.pretrained['prot']).to(device_biomarker)
 
-    # model = BiomarkerModel.load_from_checkpoint('./biomarker_bindingdb_train8595_pretopre/3477h3wf/checkpoints/epoch=30-step=7284.ckpt').to(device_biomarker)
+    model = BiomarkerModel.load_from_checkpoint('./davis_TrueToTrue_5e-06_9095/epoch=36-step=2442.ckpt').to(device_biomarker)
 
     model.eval()
     model.freeze()

@@ -1,17 +1,13 @@
-from curses import delay_output
-import gc, os
-from turtle import forward
 import numpy as np
 import pandas as pd
 import wandb
 
 from utils.utils import *
 from utils.attention_flow import *
+from module.model import deleteEncodingLayers
 
 import torch
 import torch.nn as nn
-
-import sklearn as sk
 from torch.utils.data import Dataset, DataLoader
 
 import pytorch_lightning as pl
@@ -19,6 +15,7 @@ from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from transformers import AutoConfig, AutoTokenizer, RobertaModel, BertModel
 
+import sklearn as sk
 from sklearn.metrics import f1_score, roc_curve, precision_score, recall_score, auc
 from sklearn.metrics import roc_auc_score, average_precision_score
 
@@ -162,7 +159,8 @@ class BiomarkerModel(pl.LightningModule):
         self.loss_fn = loss_fn
         self.criterion = torch.nn.BCEWithLogitsLoss()
         self.criterion_smooth = torch.nn.SmoothL1Loss()
-        # self.sigmoid = nn.Sigmoid()
+        self.validation_outputs = []  # Store validation outputs here
+        self.test_outputs = []        # Store test outputs here
 
         #-- Pretrained Model Setting
         drug_config = AutoConfig.from_pretrained(drug_model_name)
@@ -170,8 +168,9 @@ class BiomarkerModel(pl.LightningModule):
             self.d_model = RobertaModel(drug_config)
         else:
             self.d_model = RobertaModel.from_pretrained(drug_model_name, num_labels=2,
-                                                        output_hidden_states=True,
-                                                        output_attentions=True)
+                                                        # output_hidden_states=True,
+                                                        # output_attentions=True
+                                                        )
 
         prot_config = AutoConfig.from_pretrained(prot_model_name)
 
@@ -179,8 +178,9 @@ class BiomarkerModel(pl.LightningModule):
             self.p_model = BertModel(prot_config)
         else:
             self.p_model = BertModel.from_pretrained(prot_model_name,
-                                                        output_hidden_states=True,
-                                                        output_attentions=True)
+                                                        # output_hidden_states=True,
+                                                        # output_attentions=True
+                                                        )
                                                         
         if layer_limit is True:
             self.p_model = deleteEncodingLayers(self.p_model, 18)
@@ -230,21 +230,20 @@ class BiomarkerModel(pl.LightningModule):
 
         output = self(drug_inputs, prot_inputs)
         logits = output.squeeze(dim=1)
-        
+
         if self.loss_fn == 'BCE':
             loss = self.criterion(logits, labels)
         else:
             loss = self.criterion_smooth(logits, labels)
 
-        self.log("train_loss", loss)
-        return {"loss": loss}
-
+        self.log("train_loss", loss, sync_dist=True)
+        return loss
 
     def validation_step(self, batch, batch_idx):
         drug_inputs = {'input_ids': batch[0], 'attention_mask': batch[1]}
         prot_inputs = {'input_ids': batch[2], 'attention_mask': batch[3]}
         labels = batch[4]
-        
+
         output = self(drug_inputs, prot_inputs)
         logits = output.squeeze(dim=1)
 
@@ -253,22 +252,9 @@ class BiomarkerModel(pl.LightningModule):
         else:
             loss = self.criterion_smooth(logits, labels)
 
-        self.log("valid_loss", loss, on_step=False, on_epoch=True, logger=True)
-        return {"logits": logits, "labels": labels}
-
-    def validation_step_end(self, outputs):
-        return {"logits": outputs['logits'], "labels": outputs['labels']}
-
-    def validation_epoch_end(self, outputs):
-        preds = self.convert_outputs_to_preds(outputs)
-        labels = torch.as_tensor(torch.cat([output['labels'] for output in outputs], dim=0), dtype=torch.int)
-
-        auroc, auprc, sensitivity, specificity, threshold = self.log_score(preds, labels)
-                   
-        self.log("valid_auroc", auroc, on_step=False, on_epoch=True, logger=True)
-        self.log("valid_auprc", auprc, on_step=False, on_epoch=True, logger=True)
-
-        self.log("valid_sens", sensitivity, on_step=False, on_epoch=True, logger=True)
+        self.log("valid_loss", loss, on_step=False, on_epoch=True, logger=True, sync_dist=True)
+        self.validation_outputs.append({'y_pred': logits, 'y_true': labels})  # Collect outputs
+        return {'y_pred': logits, 'y_true': labels}
 
     def test_step(self, batch, batch_idx):
         drug_inputs = {'input_ids': batch[0], 'attention_mask': batch[1]}
@@ -283,24 +269,29 @@ class BiomarkerModel(pl.LightningModule):
         else:
             loss = self.criterion_smooth(logits, labels)
 
-        self.log("test_loss", loss, on_step=False, on_epoch=True, logger=True)
-        return {"logits": logits, "labels": labels}
+        self.log("test_loss", loss, on_step=False, on_epoch=True, logger=True, sync_dist=True)
+        self.test_outputs.append({'y_pred': logits, 'y_true': labels})  # Collect outputs
+        return {'y_pred': logits, 'y_true': labels}
+    
+    def on_validation_epoch_end(self):
+        # Perform evaluation at the end of validation epoch
+        auroc, auprc, sensitivity, specificity, threshold = self.log_score(self.validation_outputs)
+                   
+        self.log("valid_auroc", auroc, on_step=False, on_epoch=True, logger=True, sync_dist=True)
+        self.log("valid_auprc", auprc, on_step=False, on_epoch=True, logger=True, sync_dist=True)
+        self.log("valid_sens", sensitivity, on_step=False, on_epoch=True, logger=True, sync_dist=True)
 
-    def test_step_end(self, outputs):
-        return {"logits": outputs['logits'], "labels": outputs['labels']}
+        self.validation_outputs.clear()  # Clear outputs after each epoch
 
-    def test_epoch_end(self, outputs):
-        preds = self.convert_outputs_to_preds(outputs)
-        labels = torch.as_tensor(torch.cat([output['labels'] for output in outputs], dim=0), dtype=torch.int)
+    def on_test_epoch_end(self):
+        # Perform evaluation at the end of test epoch
+        auroc, auprc, sensitivity, specificity, threshold = self.log_score(self.test_outputs)
+                   
+        self.log("valid_auroc", auroc, on_step=False, on_epoch=True, logger=True, sync_dist=True)
+        self.log("valid_auprc", auprc, on_step=False, on_epoch=True, logger=True, sync_dist=True)
+        self.log("valid_sens", sensitivity, on_step=False, on_epoch=True, logger=True, sync_dist=True)
 
-        auroc, auprc, sensitivity, specificity, threshold = self.log_score(preds, labels)
-
-        self.log("test_auroc", auroc, on_step=False, on_epoch=True, logger=True)
-        self.log("test_auprc", auprc, on_step=False, on_epoch=True, logger=True)
-
-        self.log("test_sens", sensitivity, on_step=False, on_epoch=True, logger=True)
-        self.log("test_spec", specificity, on_step=False, on_epoch=True, logger=True)
-        self.log("test_thres", threshold, on_step=False, on_epoch=True, logger=True)
+        self.test_outputs.clear()  # Clear outputs after each epoch
 
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())
@@ -321,13 +312,12 @@ class BiomarkerModel(pl.LightningModule):
         )
         return optimizer
 
-    def convert_outputs_to_preds(self, outputs):
-        logits = torch.cat([output['logits'] for output in outputs], dim=0)
-        return logits
+    def log_score(self, outputs):
+        y_pred = torch.cat([output['y_pred'] for output in outputs], dim=0)
+        y_labels = torch.cat([output['y_true'] for output in outputs], dim=0)
 
-    def log_score(self, preds, labels):
-        y_pred = preds.detach().cpu().numpy()
-        y_label = labels.detach().cpu().numpy()
+        y_pred = y_pred.detach().cpu().numpy()
+        y_label = y_labels.detach().cpu().numpy()
 
         fpr, tpr, thresholds = roc_curve(y_label, y_pred)
         fpr = np.nan_to_num(fpr, nan=0.00001)
@@ -388,7 +378,6 @@ class BiomarkerModel(pl.LightningModule):
 
         return auroc_score, auprc_score, sensitivity1, specificity1, thred_optim
 
-
 def main_wandb(config=None):
     try:
         if config is not None:
@@ -410,11 +399,11 @@ def main_wandb(config=None):
     
         trainer = pl.Trainer(devices=config.gpu_ids,
                              max_epochs=config.max_epoch,
-                             precision=16,
+                            #  precision=16,
                              logger=model_logger,
                              callbacks=[checkpoint_callback],
                              accelerator='gpu', 
-                             strategy='dp' 
+                             strategy='auto' 
                              )
 
 
@@ -453,11 +442,11 @@ def main_default(config):
     
         trainer = pl.Trainer(devices=config.gpu_ids,
                              max_epochs=config.max_epoch,
-                             precision=16,
+                            #  precision=16,
                              logger=model_logger,
                              callbacks=[checkpoint_callback],
                              accelerator='gpu', 
-                             strategy='dp' 
+                             strategy='auto' 
                              )
 
 
@@ -481,7 +470,7 @@ def main_default(config):
 
 
 if __name__ == '__main__':
-    using_wandb = True
+    using_wandb = False
 
     if using_wandb == True:
         #-- hyper param config file Load --##
